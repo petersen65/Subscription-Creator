@@ -137,7 +137,7 @@ Set-SubscriptionCreator.ps1 -DivisionName 'Division-One' -UserOrGroupObjectId $u
 ```
 
 Login to the Azure portal <https://portal.azure.com> with the user account 'firstname lastname'
-With this user account you must only see 1 runbook with the name 'Division-One'. Select this runbook and hit Start, then fill out 3 parameters:
+With this user account you must only see 1 runbook with the name 'Division-One'. Select this runbook and hit Start, then fill out all parameters:
 
 ```
 PARENTMANAGEMENTGROUPID       : <e.g. root management group id>
