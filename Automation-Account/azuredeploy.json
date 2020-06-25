@@ -1,0 +1,122 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "stagingUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Uri to temporary staging location for downloading external resources"
+      }
+    },
+    "automationAccount": {
+      "type": "string",
+      "metadata": {
+        "description": "Automation account name of the Subscription Creator deployment"
+      }
+    },
+    "runbookNames": {
+      "type": "array",
+      "metadata": {
+        "description": "Names for all runbooks that will be deployed into the automation account"
+      }
+    }
+  },
+  "functions": [
+  ],
+  "variables": {
+    "deployResources": true,
+    "modules": [
+      {
+        "name": "Az.Accounts",
+        "uri": "https://devopsgallerystorage.blob.core.windows.net/packages/az.accounts.1.8.0.nupkg"
+      },
+      {
+        "name": "Az.Resources",
+        "uri": "https://devopsgallerystorage.blob.core.windows.net/packages/az.resources.2.0.1.nupkg"
+      },
+      {
+        "name": "Az.Subscription",
+        "uri": "https://devopsgallerystorage.blob.core.windows.net/packages/az.subscription.0.7.2.nupkg"
+      }
+    ],
+    "copy": [
+      {
+        "name": "runbooks",
+        "count": "[length(parameters('runbookNames'))]",
+        "input": {
+          "name": "[parameters('runbookNames')[copyIndex('runbooks')]]",
+          "description": "-",
+          "uri": "[concat(parameters('stagingUri'), '/', parameters('runbookNames')[copyIndex('runbooks')], '.ps1')]"
+        }
+      }
+    ]
+  },
+  "resources": [
+    {
+      "condition": "[variables('deployResources')]",
+      "name": "[parameters('automationAccount')]",
+      "type": "Microsoft.Automation/automationAccounts",
+      "apiVersion": "2015-10-31",
+      "location": "[resourceGroup().location]",
+      "tags": {
+      },
+      "properties": {
+        "sku": {
+          "name": "Basic"
+        }
+      }
+    },
+    {
+      "condition": "[variables('deployResources')]",
+      "name": "[concat(parameters('automationAccount'), '/', variables('modules')[copyIndex()].name)]",
+      "type": "Microsoft.Automation/automationAccounts/modules",
+      "apiVersion": "2015-10-31",
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccount'))]"
+      ],
+      "copy": {
+        "name": "modules-loop",
+        "mode": "Serial",
+        "count": "[length(variables('modules'))]"
+      },
+      "properties": {
+        "contentLink": {
+          "uri": "[variables('modules')[copyIndex()].uri]"
+        }
+      }
+    },
+    {
+      "condition": "[variables('deployResources')]",
+      "name": "[concat(parameters('automationAccount'), '/', variables('runbooks')[copyIndex()].name)]",
+      "type": "Microsoft.Automation/automationAccounts/runbooks",
+      "apiVersion": "2018-06-30",
+      "location": "[resourceGroup().location]",
+      "tags": {
+      },
+      "dependsOn": [
+        "modules-loop"
+      ],
+      "copy": {
+        "name": "runbooks-loop",
+        "mode": "Parallel",
+        "count": "[length(variables('runbooks'))]"
+      },
+      "properties": {
+        "logVerbose": false,
+        "logProgress": false,
+        "runbookType": "PowerShell",
+        "publishContentLink": {
+          "uri": "[variables('runbooks')[copyIndex()].uri]",
+          "version": "1.0.0.0"
+        },
+        "description": "[variables('runbooks')[copyIndex()].description]"
+      }
+    }
+  ],
+  "outputs": {
+    "arrayResult": {
+            "type": "array",
+            "value": "[variables('runbooks')]"
+        }
+  }
+}
