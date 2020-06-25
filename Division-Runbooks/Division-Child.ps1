@@ -35,7 +35,7 @@
 
     .NOTES
         AUTHOR: Michael Petersen
-        LASTEDIT: June 1, 2020
+        LASTEDIT: June 25, 2020
 #>
 
 Param
@@ -73,7 +73,11 @@ try {
     Write-Output -InputObject 'Connecting to Azure Cloud via Automation Connection'
     $runAsConnection = Get-AutomationConnection -Name 'AzureRunAsConnection'
 
-    Connect-AzAccount -ServicePrincipal -Tenant $runAsConnection.TenantID -ApplicationId $runAsConnection.ApplicationID -CertificateThumbprint $runAsConnection.CertificateThumbprint
+    Connect-AzAccount `
+        -ServicePrincipal `
+        -Tenant $runAsConnection.TenantID `
+        -ApplicationId $runAsConnection.ApplicationID `
+        -CertificateThumbprint $runAsConnection.CertificateThumbprint
 
     Write-Output -InputObject 'Connected to Azure Cloud via Automation Connection'
 }
@@ -84,9 +88,16 @@ catch [System.Management.Automation.CommandNotFoundException] {
     Write-Output -InputObject 'Connecting to Azure Cloud via Development Credential'
     Clear-AzContext -Scope 'Process' -Force
 
-    $developmentCredential = New-Object -TypeName 'System.Management.Automation.PSCredential' -ArgumentList @($Env:APPLICATION_ID, (ConvertTo-SecureString -String $Env:DEVELOPER_SECRET -AsPlainText -Force))
+    $developmentCredential = New-Object `
+        -TypeName 'System.Management.Automation.PSCredential' `
+        -ArgumentList @($Env:APPLICATION_ID, (ConvertTo-SecureString -String $Env:DEVELOPER_SECRET -AsPlainText -Force))
 
-    Connect-AzAccount -Scope 'Process' -ServicePrincipal -Credential $developmentCredential -Subscription $Env:SUBSCRIPTION_ID -Tenant $Env:TENANT_ID
+    Connect-AzAccount `
+        -Scope 'Process' `
+        -ServicePrincipal `
+        -Credential $developmentCredential `
+        -Subscription $Env:SUBSCRIPTION_ID `
+        -Tenant $Env:TENANT_ID
 
     Write-Output -InputObject 'Connected to Azure Cloud via Development Credential'
 }
@@ -95,14 +106,21 @@ catch [System.Management.Automation.CommandNotFoundException] {
 if (!(Get-AzManagementGroup -GroupName $ManagementGroupId -ErrorAction SilentlyContinue)) {
     Write-Output -InputObject 'Creating new Management Group with adjusted role assignments'
 
-    New-AzManagementGroup -GroupName $ManagementGroupId -DisplayName $ManagementGroupDisplayName -ParentId "/providers/Microsoft.Management/managementgroups/$ParentManagementGroupId"
+    New-AzManagementGroup `
+        -GroupName $ManagementGroupId `
+        -DisplayName $ManagementGroupDisplayName `
+        -ParentId "/providers/Microsoft.Management/managementgroups/$ParentManagementGroupId"
 
     # Remove direct automatic Owner role assigment of creating service principal to rely on existing
     # inherited role assignments up to the root management group
     for ($i = 1; $i -le 6; $i++) {
         # Retry until all IAM caches are stale but not more than 1 minute to avoid deadlock
         try {
-            Remove-AzRoleAssignment -ObjectId (Get-AzADServicePrincipal -ApplicationId (Get-AzContext).Account.Id).Id -RoleDefinitionName 'Owner' -Scope "/providers/Microsoft.Management/managementgroups/$ManagementGroupId"
+            Remove-AzRoleAssignment `
+                -ObjectId (Get-AzADServicePrincipal `
+                -ApplicationId (Get-AzContext).Account.Id).Id `
+                -RoleDefinitionName 'Owner' `
+                -Scope "/providers/Microsoft.Management/managementgroups/$ManagementGroupId"
 
             # Circuit breaker pattern
             Write-Output -InputObject 'Created new Management Group with adjusted role assignments'
@@ -126,7 +144,11 @@ try {
     # Finally create the new subscription under a given enrollment account and with a new direct owner assignment
     Write-Output -InputObject "Creating new subscription under Enrollment Account: $EnrollmentAccountObjectId"
 
-    $subscription = New-AzSubscription -OfferType 'MS-AZR-0017P' -Name $SubscriptionName -EnrollmentAccountObjectId $EnrollmentAccountObjectId -OwnerObjectId $SubscriptionOwnerId
+    $subscription = New-AzSubscription `
+        -OfferType 'MS-AZR-0017P' `
+        -Name $SubscriptionName `
+        -EnrollmentAccountObjectId $EnrollmentAccountObjectId `
+        -OwnerObjectId $SubscriptionOwnerId
 
     Write-Output -InputObject "Created new subscription under Enrollment Account: $EnrollmentAccountObjectId"
 }
@@ -140,7 +162,5 @@ catch [Microsoft.Azure.Management.Subscription.Models.ErrorResponseException] {
 # Move the newly created subscription from the root management group to its target management group below
 # the authorized division parent management group
 Write-Output -InputObject "Moving subscription under Management Group: $ManagementGroupId"
-
 New-AzManagementGroupSubscription -GroupName $ManagementGroupId -SubscriptionId $subscription.Id
-
 Write-Output -InputObject "Subscription moved under Management Group: $ManagementGroupId"
